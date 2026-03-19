@@ -267,12 +267,12 @@ export default function App(){
 
       if(p.scheme === "classic"){
         unreduced = (fs * yrs) / 80;
-        autoLump  = unreduced * 3;
+        autoLump  = 0;
       } else if(p.scheme === "classicplus"){
         const cy = Math.min(parseFloat(p.classicYears) || 0, yrs);
         const py = yrs - cy;
         unreduced = (fs * cy) / 80 + (fs * py) / 60;
-        autoLump  = (fs * cy / 80) * 3;
+        autoLump  = 0;
       } else if(p.scheme === "premium"){
         unreduced = (fs * yrs) / 60;
       } else if(p.scheme === "nuvos" || p.scheme === "alpha"){
@@ -317,8 +317,6 @@ export default function App(){
       }
 
       const reduced = (unreduced + enhancement) * factor;
-      // Note: for voluntary_retirement, autoLump only if NOT Classic (break rejoiner rule: no auto lump sum)
-      // Classic auto lump sum is not affected unless the period followed a break, which we flag
 
       breakdown.push({
         label: `${SCHEME_INFO[p.scheme]?.label} (${MONTHS[parseInt(p.startMonth)-1]} ${p.startYear} – ${p.endYear==="present"?"present":`${MONTHS[parseInt(p.endMonth)-1]} ${p.endYear}`})`,
@@ -393,21 +391,25 @@ export default function App(){
         if(!lastBreakEnd || bd > lastBreakEnd) lastBreakEnd = bd;
       });
 
+      // Split service breakdown into pre/post last break
       breakdown.forEach(b => {
         if(b.isTransfer) return;
-        // Determine if this period is pre- or post-last-break
-        // Use the period start from the label — simpler: mark in breakdown
         const isPostBreak = !lastBreakEnd || (b.periodStartDecimal >= lastBreakEnd);
         if(isPostBreak){
-          vrPostBreakYrs      += b.years || 0;
+          vrPostBreakYrs       += b.years || 0;
           vrPostBreakUnreduced += b.unreduced;
           vrPostBreakReduced   += b.reduced;
         } else {
-          vrPreBreakYrs       += b.years || 0;
+          vrPreBreakYrs        += b.years || 0;
           vrPreBreakUnreduced  += b.unreduced;
           vrPreBreakReduced    += b.reduced;
         }
       });
+
+      // Sum of all transfer-in reduced amounts — transfers always stay reduced, no buy-out
+      const vrTransfersReduced = breakdown
+        .filter(b => b.isTransfer)
+        .reduce((s, b) => s + b.reduced, 0);
 
       vrPostBreakReduction = vrPostBreakUnreduced - vrPostBreakReduced;
       vrPreBreakReduction  = vrPreBreakUnreduced  - vrPreBreakReduced;
@@ -419,18 +421,17 @@ export default function App(){
       // Buy-out cost on POST-BREAK reduction only (~capitalisation factor 20)
       vrBuyOutCostPostBreak = vrPostBreakReduction * 20;
 
-      // If full buy-out achieved, total pension = post-break unreduced + pre-break reduced (pre-break still reduced)
-      vrPensionIfFullBuyOut = vrPostBreakUnreduced + vrPreBreakReduced
-        + transferPeriods.reduce((s, b) => {
-            const bd = breakdown.find(x => x.label.includes(b.transferScheme) && x.isTransfer);
-            return s + (bd ? bd.reduced : 0);
-          }, 0);
+      // Full buy-out pension:
+      //   post-break service → unreduced (buy-out applied)
+      //   pre-break deferred pension → reduced (no buy-out available)
+      //   transfers → reduced (no buy-out available)
+      vrPensionIfFullBuyOut = vrPostBreakUnreduced + vrPreBreakReduced + vrTransfersReduced;
     }
 
     setResults({
       finalPension, monthly: finalPension / 12,
-      totalLump: totalAutoLump + lumpFromCommute,
-      totalAutoLump, lumpFromCommute, commuteGiveUp,
+      totalLump: lumpFromCommute,
+      totalAutoLump: 0, lumpFromCommute, commuteGiveUp,
       totalUnreduced, totalReduced,
       breakdown, retAgeDecimal: retAgeDecimal.toFixed(1),
       spa, aNPA, retDate, basis,
@@ -443,6 +444,7 @@ export default function App(){
       vrPostBreakReduced, vrPreBreakReduced,
       vrPostBreakReduction, vrPreBreakReduction,
       vrBuyOutCostPostBreak, vrPensionIfFullBuyOut,
+      vrTransfersReduced,
       hasPreBreakService: vrPreBreakYrs > 0,
       minAge: getMinAge(dob),
     });
@@ -567,8 +569,8 @@ export default function App(){
           </GovInset>}
           <GovDetails summary="Which scheme am I in?">
             <SchemeTable rows={[
-              ["Before 1 October 2002","Classic","1/80th final salary per year + automatic 3× lump sum. NPA 60."],
-              ["Oct 2002 – Jul 2007 (new entrant)","Premium","1/60th final salary per year. No automatic lump sum. NPA 60."],
+              ["Before 1 October 2002","Classic","1/80th final salary per year. NPA 60. Pension can be commuted for lump sum at £12/£1."],
+              ["Oct 2002 – Jul 2007 (new entrant)","Premium","1/60th final salary per year. NPA 60. Pension can be commuted for lump sum at £12/£1."],
               ["Joined pre-Oct 2002, stayed past Oct 2002","Classic Plus","Classic rules to Sep 2002, Premium rules from Oct 2002. NPA 60."],
               ["30 Jul 2007 – 31 Mar 2015","Nuvos","2.3% of each year's actual pay. NPA 65."],
               ["1 April 2015 onwards","Alpha","2.32% of each year's actual pay. NPA = State Pension Age (min 65)."],
@@ -612,7 +614,7 @@ export default function App(){
           <GovDetails summary="What counts as a break in service?">
             <ul style={{lineHeight:1.8,margin:0}}>
               <li><strong>Under 28 days</strong> — usually treated as continuous service.</li>
-              <li><strong>28 days to under 5 years</strong> — periods can usually be aggregated. Final salary link retained. On rejoining you accrue in the scheme appropriate to your return date (Alpha from April 2015 onwards). No new automatic Classic lump sum accrues after the break.</li>
+              <li><strong>28 days to under 5 years</strong> — periods can usually be aggregated. Final salary link retained. On rejoining you accrue in the scheme appropriate to your return date (Alpha from April 2015 onwards).</li>
               <li><strong>5 years or more</strong> — final salary link to Classic/Premium is lost. Pre-break benefits become a deferred pension fixed at leaving salary, uprated by CPI during the break.</li>
             </ul>
           </GovDetails>
@@ -789,7 +791,7 @@ export default function App(){
 
           <Divider/>
           <h2 style={sH2}>Pension commutation (optional)</h2>
-          <GovHint>Exchange annual pension for a larger tax-free lump sum at retirement. Rate: <strong>£12 lump sum per £1 of pension given up</strong>. Classic members also receive an automatic 3× lump sum.</GovHint>
+          <GovHint>Exchange annual pension for a larger tax-free lump sum at retirement. The rate is <strong>£12 lump sum for every £1 of annual pension given up</strong>. This applies to all schemes including Classic.</GovHint>
           <GovCheckbox id="commute" checked={commute} onChange={e=>setCommute(e.target.checked)} label="I want to commute additional pension into a lump sum"/>
           {commute&&<div style={{paddingLeft:36,marginTop:8}}>
             <GovField label="Annual pension to give up (£ per year)" id="commuteAmt" hint="Every £1 given up = £12 lump sum.">
@@ -810,9 +812,33 @@ export default function App(){
           {results.basis==="voluntary_retirement"
             ?<>
               <div style={{background:G.green,color:G.white,padding:"22px 24px",marginBottom:4}}>
-                <div style={{fontSize:13,marginBottom:4,opacity:0.85}}>Estimated annual pension — assuming buy-out of actuarial reduction (VR terms, before tax)</div>
-                <div style={{fontSize:46,fontWeight:"bold",lineHeight:1,marginBottom:6}}>{fmt(results.vrPensionIfFullBuyOut - results.commuteGiveUp)}</div>
-                <div style={{fontSize:18,opacity:0.9}}>{fmt((results.vrPensionIfFullBuyOut - results.commuteGiveUp) / 12)} per month</div>
+                <div style={{fontSize:13,marginBottom:4,opacity:0.85}}>
+                  Estimated annual pension — Voluntary Redundancy with buy-out applied (before tax)
+                </div>
+                <div style={{fontSize:46,fontWeight:"bold",lineHeight:1,marginBottom:6}}>
+                  {fmt(results.vrPensionIfFullBuyOut - results.commuteGiveUp)}
+                </div>
+                <div style={{fontSize:18,opacity:0.9}}>
+                  {fmt((results.vrPensionIfFullBuyOut - results.commuteGiveUp) / 12)} per month
+                </div>
+                <div style={{marginTop:14,paddingTop:12,borderTop:"1px solid rgba(255,255,255,0.35)",fontSize:13,display:"flex",flexWrap:"wrap",gap:"16px 24px"}}>
+                  <div>
+                    <div style={{opacity:0.75,marginBottom:2}}>Post-break service (unreduced)</div>
+                    <div style={{fontWeight:"bold"}}>{fmt(results.vrPostBreakUnreduced)}/yr</div>
+                  </div>
+                  {results.hasPreBreakService&&<div>
+                    <div style={{opacity:0.75,marginBottom:2}}>Pre-break deferred (actuarially reduced)</div>
+                    <div style={{fontWeight:"bold"}}>{fmt(results.vrPreBreakReduced)}/yr</div>
+                  </div>}
+                  {results.vrTransfersReduced>0&&<div>
+                    <div style={{opacity:0.75,marginBottom:2}}>Transfers in (actuarially reduced)</div>
+                    <div style={{fontWeight:"bold"}}>{fmt(results.vrTransfersReduced)}/yr</div>
+                  </div>}
+                  {results.commuteGiveUp>0&&<div>
+                    <div style={{opacity:0.75,marginBottom:2}}>Less commutation</div>
+                    <div style={{fontWeight:"bold"}}>−{fmt(results.commuteGiveUp)}/yr</div>
+                  </div>}
+                </div>
               </div>
               <div style={{background:"#505a5f",color:G.white,padding:"12px 20px",marginBottom:20,fontSize:14}}>
                 If <strong>no buy-out</strong> is made (or under Voluntary Exit terms where shortfall is not covered):&nbsp;
@@ -827,13 +853,11 @@ export default function App(){
             </div>
           }
 
-          {results.totalLump>0&&<div style={{background:G.greenLight,border:`2px solid ${G.greenBorder}`,padding:"16px 20px",marginBottom:20}}>
-            <div style={{fontSize:14,color:G.textSec,marginBottom:4}}>Tax-free lump sum</div>
-            <div style={{fontSize:32,fontWeight:"bold",color:G.greenDark}}>{fmt(results.totalLump)}</div>
+          {results.lumpFromCommute>0&&<div style={{background:G.greenLight,border:`2px solid ${G.greenBorder}`,padding:"16px 20px",marginBottom:20}}>
+            <div style={{fontSize:14,color:G.textSec,marginBottom:4}}>Tax-free lump sum (from commutation)</div>
+            <div style={{fontSize:32,fontWeight:"bold",color:G.greenDark}}>{fmt(results.lumpFromCommute)}</div>
             <div style={{fontSize:13,color:G.textSec,marginTop:4}}>
-              {results.totalAutoLump>0&&`Automatic Classic lump sum: ${fmt(results.totalAutoLump)}`}
-              {results.totalAutoLump>0&&results.lumpFromCommute>0&&" + "}
-              {results.lumpFromCommute>0&&`From commutation: ${fmt(results.lumpFromCommute)}`}
+              {fmt(results.commuteGiveUp)}/yr of pension given up × 12 = {fmt(results.lumpFromCommute)} tax-free cash
             </div>
           </div>}
 
@@ -1010,9 +1034,14 @@ export default function App(){
             <p style={{margin:0,fontSize:13,color:G.textSec,borderTop:`1px solid ${G.border}`,paddingTop:10,marginTop:10}}>For an official estimate: <strong>www.civilservicepensionscheme.org.uk</strong> · For regulated financial advice: <strong>www.moneyhelper.org.uk</strong> or <strong>www.unbiased.co.uk</strong> · The operator accepts no liability for any loss arising from reliance on these estimates.</p>
           </div>
 
-          <button onClick={()=>{setStep(0);setResults(null);setFinalSalary("");setRetYear("");setPeriods([makePeriod("service")]);}} style={addBtnSolid}>
-            Start a new calculation
-          </button>
+          <div style={{display:"flex",gap:16,marginTop:24,alignItems:"center"}}>
+            <button onClick={()=>{setStep(0);setResults(null);setFinalSalary("");setRetYear("");setPeriods([makePeriod("service")]);window.scrollTo({top:0,behavior:"smooth"});}} style={addBtnSolid}>
+              Start a new calculation
+            </button>
+            <button onClick={()=>{setResults(null);setStep(3);window.scrollTo({top:0,behavior:"smooth"});}} style={backLink}>
+              ← Back to change retirement terms
+            </button>
+          </div>
         </>}
 
         {/* NAV */}
