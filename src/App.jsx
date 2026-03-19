@@ -293,6 +293,7 @@ export default function App(){
         years: yrs, unreduced, autoLump, reduced, factor,
         yearsEarly: yearsEarlyThisScheme, npa, enhancement,
         isTransfer: false,
+        periodStartDecimal: toDecimal(parseInt(p.startMonth), parseInt(p.startYear)),
       });
     });
 
@@ -337,18 +338,60 @@ export default function App(){
     }
     const finalPension = totalReduced - commuteGiveUp;
 
-    // Voluntary retirement CSCS — compensation payment & buy-out
-    let vrCompensation = 0, vrBuyOutCost = 0, vrBuyOutMonths = 0;
+    // ── Voluntary retirement CSCS — compensation & buy-out ──────────────────
+    // Key rule (CSCS 2010):
+    // - Compensation is based on POST-LAST-BREAK continuous service only (1 month/yr, max 21 months)
+    // - Employer buy-out subsidy (VR only) applies ONLY to the actuarial reduction on post-last-break pension
+    // - Pre-break deferred pension can be taken early but is always actuarially reduced — no buy-out applies
+    let vrCompensation = 0;
+    let vrPostBreakYrs = 0, vrPreBreakYrs = 0;
+    let vrPostBreakUnreduced = 0, vrPreBreakUnreduced = 0;
+    let vrPostBreakReduced = 0, vrPreBreakReduced = 0;
+    let vrPostBreakReduction = 0, vrPreBreakReduction = 0;
+    let vrBuyOutCostPostBreak = 0;
+    let vrPensionIfFullBuyOut = 0;
+
     if(basis === "voluntary_retirement"){
-      // CSCS 2010: 1 month per year of service up to 21 months (VR)
-      const totalYrs = servicePeriods.reduce((s, p) => s + getServiceYears(p), 0);
-      const capMonths = Math.min(21, Math.round(totalYrs));
-      vrCompensation = fs / 12 * capMonths;
-      // Reduction on pension = totalUnreduced - totalReduced
-      const totalReduction = totalUnreduced - totalReduced;
-      // Buy-out cost is approx: annual reduction × 20 (rough capitalisation factor)
-      vrBuyOutCost = totalReduction * 20;
-      vrBuyOutMonths = Math.ceil((vrBuyOutCost / (fs / 12)));
+      // Find the last break end date (if any)
+      let lastBreakEnd = null;
+      breakPeriods.forEach(b => {
+        if(!b.breakEndYear) return;
+        const bd = toDecimal(parseInt(b.breakEndMonth), parseInt(b.breakEndYear));
+        if(!lastBreakEnd || bd > lastBreakEnd) lastBreakEnd = bd;
+      });
+
+      breakdown.forEach(b => {
+        if(b.isTransfer) return;
+        // Determine if this period is pre- or post-last-break
+        // Use the period start from the label — simpler: mark in breakdown
+        const isPostBreak = !lastBreakEnd || (b.periodStartDecimal >= lastBreakEnd);
+        if(isPostBreak){
+          vrPostBreakYrs      += b.years || 0;
+          vrPostBreakUnreduced += b.unreduced;
+          vrPostBreakReduced   += b.reduced;
+        } else {
+          vrPreBreakYrs       += b.years || 0;
+          vrPreBreakUnreduced  += b.unreduced;
+          vrPreBreakReduced    += b.reduced;
+        }
+      });
+
+      vrPostBreakReduction = vrPostBreakUnreduced - vrPostBreakReduced;
+      vrPreBreakReduction  = vrPreBreakUnreduced  - vrPreBreakReduced;
+
+      // CSCS compensation = 1 month salary × post-break continuous years, max 21 months
+      const capMonths = Math.min(21, Math.floor(vrPostBreakYrs));
+      vrCompensation = (fs / 12) * capMonths;
+
+      // Buy-out cost on POST-BREAK reduction only (~capitalisation factor 20)
+      vrBuyOutCostPostBreak = vrPostBreakReduction * 20;
+
+      // If full buy-out achieved, total pension = post-break unreduced + pre-break reduced (pre-break still reduced)
+      vrPensionIfFullBuyOut = vrPostBreakUnreduced + vrPreBreakReduced
+        + transferPeriods.reduce((s, b) => {
+            const bd = breakdown.find(x => x.label.includes(b.transferScheme) && x.isTransfer);
+            return s + (bd ? bd.reduced : 0);
+          }, 0);
     }
 
     setResults({
@@ -361,7 +404,13 @@ export default function App(){
       finalSalaryLinkLost, longestBreak,
       hasBreaks: breakPeriods.length > 0,
       hasTransfers: transferPeriods.length > 0,
-      vrCompensation, vrBuyOutCost, vrBuyOutMonths,
+      // VR fields
+      vrCompensation, vrPostBreakYrs, vrPreBreakYrs,
+      vrPostBreakUnreduced, vrPreBreakUnreduced,
+      vrPostBreakReduced, vrPreBreakReduced,
+      vrPostBreakReduction, vrPreBreakReduction,
+      vrBuyOutCostPostBreak, vrPensionIfFullBuyOut,
+      hasPreBreakService: vrPreBreakYrs > 0,
       minAge: getMinAge(dob),
     });
   }
@@ -600,7 +649,7 @@ export default function App(){
                                   <span style={{fontSize:16}}>£</span>
                                   <input type="number" value={p.salaryInputs?.[idx]??""} onChange={e=>updateSalaryInput(p.id,idx,e.target.value)}
                                     placeholder="e.g. 35000"
-                                    style={{border:`2px solid ${errors[ek]?G.error:G.border}`,padding:"7px 10px",fontSize:15,width:160,fontFamily:G.font,outline:"none",color:G.text}}/>
+                                    style={{border:`2px solid ${errors[ek]?G.error:G.border}`,padding:"7px 10px",fontSize:15,width:160,fontFamily:G.font,outline:"none",color:"#0b0c0c",background:"#ffffff"}}/>
                                 </div>
                                 {errors[ek]&&<div style={{color:G.error,fontSize:13,marginTop:4}}>Enter a salary for this year</div>}
                               </td>
@@ -735,30 +784,85 @@ export default function App(){
           {/* CSCS voluntary retirement box */}
           {results.basis==="voluntary_retirement"&&<div style={{background:"#e8f0fe",border:`2px solid ${G.link}`,padding:"18px 20px",marginBottom:24}}>
             <strong style={{fontSize:16,color:G.link}}>🔄 Civil Service Compensation Scheme — Voluntary Exit / Redundancy</strong>
-            <p style={{margin:"8px 0 6px",fontSize:14,lineHeight:1.7}}>
-              Under the CSCS 2010, you are likely entitled to a compensation payment of approximately:
-            </p>
-            <div style={{fontSize:24,fontWeight:"bold",color:G.greenDark,marginBottom:8}}>{fmt(results.vrCompensation)}</div>
-            <p style={{margin:"0 0 8px",fontSize:14,lineHeight:1.7}}>
-              (Calculated as 1 month's salary × {Math.min(21, Math.round(servicePeriods.reduce((s,p)=>s+getServiceYears(p),0)))} months — maximum 21 months under VR terms.)
-            </p>
-            <p style={{margin:"0 0 8px",fontSize:14,lineHeight:1.7}}>
-              The <strong>estimated cost to buy out the actuarial reduction</strong> (to receive your pension unreduced) is approximately:
-            </p>
-            <div style={{fontSize:24,fontWeight:"bold",color:results.vrBuyOutCost<=results.vrCompensation?G.green:G.error,marginBottom:8}}>
-              {fmt(results.vrBuyOutCost)}
+
+            {/* Rule explanation */}
+            <div style={{background:"#f0f4ff",border:`1px solid ${G.link}`,padding:"10px 14px",margin:"12px 0",fontSize:13,lineHeight:1.7}}>
+              <strong>How the CSCS buy-out works:</strong> Under CSCS 2010, your compensation payment and any employer buy-out subsidy (under VR terms) apply <strong>only to your post-last-break continuous service</strong>. Any pension built up before a break in service is a separate deferred pension — it can be taken early but the actuarial reduction on it cannot be bought out using compensation.
             </div>
-            {results.vrBuyOutCost<=results.vrCompensation
-              ?<div style={{background:"#e8f5e9",border:`1px solid ${G.green}`,padding:"10px 14px",fontSize:14,color:G.greenDark}}>
-                ✓ Your estimated compensation payment appears sufficient to <strong>fully buy out the actuarial reduction</strong>. If so, you would receive your full unreduced pension of <strong>{fmt(results.totalUnreduced)}</strong>/yr.
+
+            {/* Post-break service section */}
+            <h3 style={{fontSize:15,fontWeight:"bold",margin:"14px 0 8px",color:G.greenDark}}>
+              Current continuous service (post-{results.hasPreBreakService?"last break":"joining"})
+            </h3>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12,marginBottom:12}}>
+              <div style={{background:G.white,border:`1px solid ${G.border}`,padding:"10px 12px"}}>
+                <div style={{fontSize:11,color:G.textSec,marginBottom:4,textTransform:"uppercase",letterSpacing:0.5}}>Service</div>
+                <div style={{fontSize:18,fontWeight:"bold"}}>{fmtYrs(results.vrPostBreakYrs)}</div>
               </div>
-              :<div style={{background:"#fff4e5",border:`1px solid ${G.warning}`,padding:"10px 14px",fontSize:14}}>
-                ⚠ The estimated buy-out cost exceeds your likely compensation payment by approximately <strong>{fmt(results.vrBuyOutCost-results.vrCompensation)}</strong>.
-                Under voluntary redundancy terms your employer may subsidise the shortfall. Under voluntary exit terms you would need to fund the gap yourself or accept a partially reduced pension.
+              <div style={{background:G.white,border:`1px solid ${G.border}`,padding:"10px 12px"}}>
+                <div style={{fontSize:11,color:G.textSec,marginBottom:4,textTransform:"uppercase",letterSpacing:0.5}}>Pension (unreduced)</div>
+                <div style={{fontSize:18,fontWeight:"bold",color:G.greenDark}}>{fmt(results.vrPostBreakUnreduced)}/yr</div>
               </div>
-            }
-            <p style={{margin:"12px 0 0",fontSize:13,color:G.textSec,fontStyle:"italic"}}>
-              Note: buy-out costs are estimated using an indicative capitalisation factor of 20. Exact costs are set by the Government Actuary's Department and will be provided by the Scheme Administrator. The pension shown in the headline figure above is the <em>actuarially reduced</em> amount — i.e. if no buy-out is made.
+              <div style={{background:G.white,border:`1px solid ${G.border}`,padding:"10px 12px"}}>
+                <div style={{fontSize:11,color:G.textSec,marginBottom:4,textTransform:"uppercase",letterSpacing:0.5}}>Actuarial reduction</div>
+                <div style={{fontSize:18,fontWeight:"bold",color:results.vrPostBreakReduction>0?G.error:G.green}}>
+                  {results.vrPostBreakReduction>0?`−${fmt(results.vrPostBreakReduction)}/yr`:"None"}
+                </div>
+              </div>
+            </div>
+
+            <p style={{margin:"0 0 6px",fontSize:14}}><strong>Estimated CSCS compensation payment</strong> (1 month × {Math.min(21,Math.floor(results.vrPostBreakYrs))} months, max 21):</p>
+            <div style={{fontSize:26,fontWeight:"bold",color:G.greenDark,marginBottom:12}}>{fmt(results.vrCompensation)}</div>
+
+            {results.vrPostBreakReduction > 0 ? <>
+              <p style={{margin:"0 0 6px",fontSize:14}}><strong>Estimated cost to buy out the actuarial reduction on post-break service</strong> (indicative factor of 20×):</p>
+              <div style={{fontSize:26,fontWeight:"bold",color:results.vrBuyOutCostPostBreak<=results.vrCompensation?G.green:G.error,marginBottom:12}}>
+                {fmt(results.vrBuyOutCostPostBreak)}
+              </div>
+
+              {results.vrBuyOutCostPostBreak <= results.vrCompensation
+                ? <div style={{background:"#e8f5e9",border:`1px solid ${G.green}`,padding:"12px 14px",fontSize:14,color:G.greenDark,marginBottom:12}}>
+                    <strong>✓ Your compensation payment appears sufficient to fully buy out the actuarial reduction on your current service.</strong>
+                    <br/>Post-break pension would be paid unreduced at <strong>{fmt(results.vrPostBreakUnreduced)}/yr</strong>.
+                    {results.hasPreBreakService&&<><br/>Your pre-break deferred pension of <strong>{fmt(results.vrPreBreakReduced)}/yr</strong> would still be actuarially reduced (no buy-out available on that element).</>}
+                    <br/><strong>Combined pension if buy-out exercised: {fmt(results.vrPensionIfFullBuyOut)}/yr</strong>
+                  </div>
+                : <div style={{background:"#fff4e5",border:`1px solid ${G.warning}`,padding:"12px 14px",fontSize:14,marginBottom:12}}>
+                    <strong>⚠ The estimated buy-out cost exceeds your compensation payment by {fmt(results.vrBuyOutCostPostBreak - results.vrCompensation)}.</strong>
+                    <br/>Under <strong>Voluntary Redundancy</strong> terms: your employer must top up to cover the full buy-out cost. You receive your post-break pension unreduced.
+                    <br/>Under <strong>Voluntary Exit</strong> terms: you must fund the shortfall yourself, or accept the actuarially reduced pension.
+                    {results.hasPreBreakService&&<><br/>Either way, your pre-break deferred pension of <strong>{fmt(results.vrPreBreakReduced)}/yr</strong> remains actuarially reduced — no buy-out applies.</>}
+                    <br/><strong>Combined pension if VR buy-out fully applied: {fmt(results.vrPensionIfFullBuyOut)}/yr</strong>
+                  </div>
+              }
+            </> : <div style={{background:"#e8f5e9",border:`1px solid ${G.green}`,padding:"12px 14px",fontSize:14,color:G.greenDark,marginBottom:12}}>
+              ✓ No actuarial reduction applies to your post-break service — you are retiring at or after its NPA.
+            </div>}
+
+            {/* Pre-break section */}
+            {results.hasPreBreakService&&<>
+              <h3 style={{fontSize:15,fontWeight:"bold",margin:"16px 0 8px",color:G.greenDark}}>Pre-break deferred pension</h3>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12,marginBottom:8}}>
+                <div style={{background:G.white,border:`1px solid ${G.border}`,padding:"10px 12px"}}>
+                  <div style={{fontSize:11,color:G.textSec,marginBottom:4,textTransform:"uppercase",letterSpacing:0.5}}>Service</div>
+                  <div style={{fontSize:18,fontWeight:"bold"}}>{fmtYrs(results.vrPreBreakYrs)}</div>
+                </div>
+                <div style={{background:G.white,border:`1px solid ${G.border}`,padding:"10px 12px"}}>
+                  <div style={{fontSize:11,color:G.textSec,marginBottom:4,textTransform:"uppercase",letterSpacing:0.5}}>Pension (unreduced)</div>
+                  <div style={{fontSize:18,fontWeight:"bold",color:G.greenDark}}>{fmt(results.vrPreBreakUnreduced)}/yr</div>
+                </div>
+                <div style={{background:G.white,border:`1px solid ${G.border}`,padding:"10px 12px"}}>
+                  <div style={{fontSize:11,color:G.textSec,marginBottom:4,textTransform:"uppercase",letterSpacing:0.5}}>After AR (no buy-out)</div>
+                  <div style={{fontSize:18,fontWeight:"bold",color:results.vrPreBreakReduction>0?G.error:G.green}}>{fmt(results.vrPreBreakReduced)}/yr</div>
+                </div>
+              </div>
+              <div style={{background:"#fff4e5",border:`1px solid ${G.warning}`,padding:"10px 14px",fontSize:13}}>
+                ⚠ <strong>No buy-out available on pre-break service.</strong> This deferred pension is taken early on an actuarially reduced basis only. The reduction shown is permanent for life.
+              </div>
+            </>}
+
+            <p style={{margin:"16px 0 0",fontSize:12,color:G.textSec,fontStyle:"italic",borderTop:`1px solid ${G.border}`,paddingTop:10}}>
+              Buy-out costs are estimated using an indicative capitalisation factor of 20. Exact costs are set by the Government Actuary's Department and provided by the Scheme Administrator. Compensation calculations use current CSCS 2010 terms (1 month/year, max 21 months). The headline pension figure above shows the <em>actuarially reduced</em> position — i.e. if no buy-out is exercised.
             </p>
           </div>}
 
