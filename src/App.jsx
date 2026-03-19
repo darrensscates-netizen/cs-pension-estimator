@@ -97,8 +97,12 @@ export default function App(){
   const [errors, setErrors] = useState({});
 
   // Step 0
-  const [dob,  setDob]  = useState("");
-  const [name, setName] = useState("");
+  const [dobMonth, setDobMonth] = useState("");
+  const [dobYear,  setDobYear]  = useState("");
+  // Derive a date string for existing functions that use dob
+  const dob = dobMonth && dobYear && !isNaN(dobYear) && parseInt(dobYear) > 1930
+    ? `${dobYear}-${String(dobMonth).padStart(2,"0")}-15`
+    : "";
 
   // Step 1
   const [periods, setPeriods] = useState([makePeriod("service")]);
@@ -180,7 +184,10 @@ export default function App(){
   // ── validation ──
   function validate(){
     const e = {};
-    if(step === 0){ if(!dob) e.dob = "Enter your date of birth"; }
+    if(step === 0){
+      if(!dobMonth || !dobYear || isNaN(dobYear) || parseInt(dobYear) <= 1930)
+        e.dob = "Enter your date of birth";
+    }
     if(step === 1){
       periods.forEach((p, i) => {
         if(p.type === "service"){
@@ -361,11 +368,12 @@ export default function App(){
     const totalReduced   = breakdown.reduce((s, b) => s + b.reduced,   0);
     const totalAutoLump  = breakdown.reduce((s, b) => s + b.autoLump,  0);
 
-    // Commutation
+    // Commutation — commuteAmt is now the desired lump sum; pension reduction = lump ÷ 12
     let commuteGiveUp = 0, lumpFromCommute = 0;
-    if(commute && commuteAmt && !isNaN(commuteAmt)){
-      commuteGiveUp   = Math.min(parseFloat(commuteAmt), totalReduced);
-      lumpFromCommute = commuteGiveUp * 12;
+    if(commute && commuteAmt && !isNaN(commuteAmt) && parseFloat(commuteAmt) > 0){
+      lumpFromCommute = parseFloat(commuteAmt);
+      commuteGiveUp   = Math.min(lumpFromCommute / 12, totalReduced); // pension reduction, capped at total pension
+      lumpFromCommute = commuteGiveUp * 12; // recalculate lump in case it was capped
     }
     const finalPension = totalReduced - commuteGiveUp;
 
@@ -554,13 +562,20 @@ export default function App(){
         {step===0&&<>
           <H1>About you</H1>
           <GovHint>We use your date of birth to determine your Normal Pension Age for each scheme and your State Pension Age.</GovHint>
-          <GovField label="Full name (optional)" id="name" hint="Used only to personalise your results">
-            <GovInput id="name" value={name} onChange={e=>setName(e.target.value)} width={300} placeholder="e.g. Jane Smith"/>
+
+          <GovField label="Date of birth" id="dob" error={errors.dob} required hint="Select the month and year you were born">
+            <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+              <GovSelect value={dobMonth} onChange={e=>setDobMonth(e.target.value)} width={160}>
+                <option value="">Month</option>
+                {MONTHS.map((m,i)=><option key={i} value={i+1}>{m}</option>)}
+              </GovSelect>
+              <GovInput id="dob" type="number" min="1930" max={CY-16}
+                value={dobYear} onChange={e=>setDobYear(e.target.value)}
+                width={110} placeholder="Year" error={!!errors.dob}/>
+            </div>
           </GovField>
-          <GovField label="Date of birth" id="dob" error={errors.dob} required>
-            <GovInput id="dob" type="date" value={dob} onChange={e=>setDob(e.target.value)} width={220} error={!!errors.dob}/>
-          </GovField>
-          {dob&&<GovInset>
+
+          {dobYear&&dobMonth&&!isNaN(dobYear)&&parseInt(dobYear)>1930&&<GovInset>
             <strong>Your Normal Pension Ages:</strong>
             <ul style={{margin:"6px 0 0",paddingLeft:20,lineHeight:1.8}}>
               <li>Classic / Premium: <strong>60</strong></li>
@@ -568,6 +583,7 @@ export default function App(){
               <li>Alpha: <strong>{getAlphaNPA(dob)}</strong> (greater of State Pension Age {getSPA(dob)} or 65)</li>
             </ul>
           </GovInset>}
+
           <GovDetails summary="Which scheme am I in?">
             <SchemeTable rows={[
               ["Before 1 October 2002","Classic","1/80th final salary per year. NPA 60. Pension can be commuted for lump sum at £12/£1."],
@@ -792,22 +808,23 @@ export default function App(){
 
           <Divider/>
           <h2 style={sH2}>Pension commutation (optional)</h2>
-          <GovHint>Exchange annual pension for a larger tax-free lump sum at retirement. The rate is <strong>£12 lump sum for every £1 of annual pension given up</strong>. This applies to all schemes including Classic.</GovHint>
-          <GovCheckbox id="commute" checked={commute} onChange={e=>setCommute(e.target.checked)} label="I want to commute additional pension into a lump sum"/>
+          <GovHint>You can take a tax-free lump sum at retirement by giving up some of your annual pension. The rate is <strong>£12 lump sum for every £1 of annual pension given up</strong>. Enter the lump sum you would like to receive and we will show you the resulting reduction in your annual pension.</GovHint>
+          <GovCheckbox id="commute" checked={commute} onChange={e=>setCommute(e.target.checked)} label="I want to take a tax-free lump sum"/>
           {commute&&<div style={{paddingLeft:36,marginTop:8}}>
-            <GovField label="Annual pension to give up (£ per year)" id="commuteAmt" hint="Every £1 given up = £12 lump sum.">
+            <GovField label="Tax-free lump sum required (£)" id="commuteAmt"
+              hint="Enter the lump sum amount you would like. Every £12 of lump sum costs £1 of annual pension.">
               <PoundInput id="commuteAmt" value={commuteAmt} onChange={e=>setCommuteAmt(e.target.value)}/>
             </GovField>
             {commuteAmt&&!isNaN(commuteAmt)&&parseFloat(commuteAmt)>0&&<GovInset>
-              Additional lump sum: <strong>{fmt(parseFloat(commuteAmt)*12)}</strong><br/>
-              Annual pension reduced by: <strong>{fmt(parseFloat(commuteAmt))}/year</strong>
+              Annual pension reduction: <strong>{fmt(parseFloat(commuteAmt)/12)}/year</strong><br/>
+              Tax-free lump sum received: <strong>{fmt(parseFloat(commuteAmt))}</strong>
             </GovInset>}
           </div>}
         </>}
 
         {/* ══ STEP 4: RESULTS ══ */}
         {step===4&&results&&<>
-          <H1>{name?`${name}'s pension estimate`:"Your pension estimate"}</H1>
+          <H1>Your pension estimate</H1>
 
           {/* Headline pension — for VR show the buy-out (best case) figure as the primary */}
           {results.basis==="voluntary_retirement"
@@ -836,7 +853,7 @@ export default function App(){
                     <div style={{fontWeight:"bold"}}>{fmt(results.vrTransfersReduced)}/yr</div>
                   </div>}
                   {results.commuteGiveUp>0&&<div>
-                    <div style={{opacity:0.75,marginBottom:2}}>Less commutation</div>
+                    <div style={{opacity:0.75,marginBottom:2}}>Less pension for lump sum ({fmt(results.lumpFromCommute)})</div>
                     <div style={{fontWeight:"bold"}}>−{fmt(results.commuteGiveUp)}/yr</div>
                   </div>}
                 </div>
@@ -858,7 +875,7 @@ export default function App(){
             <div style={{fontSize:14,color:G.textSec,marginBottom:4}}>Tax-free lump sum (from commutation)</div>
             <div style={{fontSize:32,fontWeight:"bold",color:G.greenDark}}>{fmt(results.lumpFromCommute)}</div>
             <div style={{fontSize:13,color:G.textSec,marginTop:4}}>
-              {fmt(results.commuteGiveUp)}/yr of pension given up × 12 = {fmt(results.lumpFromCommute)} tax-free cash
+              Annual pension reduced by {fmt(results.commuteGiveUp)}/yr to receive this lump sum
             </div>
           </div>}
 
@@ -1015,7 +1032,7 @@ export default function App(){
                 results.basis==="voluntary_retirement"?["Pension (with VR buy-out applied)",`${fmt(results.vrPensionIfFullBuyOut - results.commuteGiveUp)}/yr · ${fmt((results.vrPensionIfFullBuyOut - results.commuteGiveUp)/12)}/month`]:null,
                 results.basis==="voluntary_retirement"?["Pension (no buy-out / VE reduced)",`${fmt(results.finalPension)}/yr · ${fmt(results.monthly)}/month`]:null,
                 results.hasBreaks?["Longest break in service",`${fmtYrs(results.longestBreak)} ${results.finalSalaryLinkLost?"— final salary link LOST":"— final salary link retained"}`]:null,
-                results.commuteGiveUp>0?["Pension commuted",`${fmt(results.commuteGiveUp)}/yr → ${fmt(results.lumpFromCommute)} lump sum`]:null,
+                results.commuteGiveUp>0?["Tax-free lump sum taken",`${fmt(results.lumpFromCommute)} (pension reduced by ${fmt(results.commuteGiveUp)}/yr)`]:null,
               ].filter(Boolean).map(([k,v],i)=>(
                 <tr key={k} style={{background:i%2===0?G.white:G.bg,borderBottom:`1px solid ${G.border}`}}>
                   <th style={{padding:"10px 14px",textAlign:"left",fontWeight:"bold",width:"55%",borderRight:`1px solid ${G.border}`}}>{k}</th>
@@ -1036,7 +1053,7 @@ export default function App(){
           </div>
 
           <div style={{display:"flex",gap:16,marginTop:24,alignItems:"center"}}>
-            <button onClick={()=>{setStep(0);setResults(null);setFinalSalary("");setRetYear("");setPeriods([makePeriod("service")]);window.scrollTo({top:0,behavior:"smooth"});}} style={addBtnSolid}>
+            <button onClick={()=>{setStep(0);setResults(null);setFinalSalary("");setRetYear("");setDobMonth("");setDobYear("");setPeriods([makePeriod("service")]);window.scrollTo({top:0,behavior:"smooth"});}} style={addBtnSolid}>
               Start a new calculation
             </button>
             <button onClick={()=>{setResults(null);setStep(3);window.scrollTo({top:0,behavior:"smooth"});}} style={backLink}>
