@@ -275,10 +275,38 @@ export default function App(){
         autoLump  = (fs * cy / 80) * 3;
       } else if(p.scheme === "premium"){
         unreduced = (fs * yrs) / 60;
-      } else if(p.scheme === "nuvos"){
-        unreduced = (p.salaryInputs || []).reduce((s, v) => s + (parseFloat(v) || 0) * 0.023, 0);
-      } else if(p.scheme === "alpha"){
-        unreduced = (p.salaryInputs || []).reduce((s, v) => s + (parseFloat(v) || 0) * 0.0232, 0);
+      } else if(p.scheme === "nuvos" || p.scheme === "alpha"){
+        // ── CPI revaluation model ──────────────────────────────────────────────
+        // Each April 1st (scheme anniversary) the pot is revalued by CPI.
+        // Formula per year: new_pot = (old_pot + year_accrual) × (1 + CPI)
+        // For the final part-year (retirement mid-year): add raw accrual, no CPI applied
+        // as CPI is only applied on April anniversaries.
+        // We use 3% long-run CPI assumption throughout.
+        //
+        // salaryInputs[0] = first full scheme year, salaryInputs[N-1] = last full year
+        // If retirement is mid-year, the last entry may cover a partial year.
+        const CPI = 0.03;
+        const rate = p.scheme === "nuvos" ? 0.023 : 0.0232;
+        const inputs = p.salaryInputs || [];
+        const totalMonths = months; // total months of service
+
+        // Work out how many full April–March years there are and the partial remainder
+        const fullYears = Math.floor(totalMonths / 12);
+        const partMonths = totalMonths % 12; // leftover months in final part-year
+
+        let pot = 0;
+        // Process each full scheme year: (pot + accrual) × (1 + CPI)
+        for(let i = 0; i < fullYears; i++){
+          const sal = parseFloat(inputs[i]) || 0;
+          pot = (pot + sal * rate) * (1 + CPI);
+        }
+        // Add part-year accrual (pro-rated, no CPI applied — CPI only at April anniversaries)
+        if(partMonths > 0){
+          const partSal = parseFloat(inputs[fullYears]) || 0;
+          const partAccrual = partSal * rate * (partMonths / 12);
+          pot += partAccrual; // no CPI on final part-year
+        }
+        unreduced = pot;
       }
 
       // Ill-health upper tier: add enhancement
@@ -619,14 +647,29 @@ export default function App(){
 
           {carePeriods.length>0&&<>
             <h2 style={sH2}>Career average schemes (Nuvos and Alpha)</h2>
-            <GovHint>For Nuvos and Alpha, pension is the sum of <strong>2.3% (Nuvos) or 2.32% (Alpha) of each year's actual pensionable pay</strong>. Enter salaries year by year (scheme years run April to March).</GovHint>
+            <GovHint>
+              For Nuvos and Alpha, your pension is built up year by year as <strong>2.3% (Nuvos) or 2.32% (Alpha) of that year's pensionable pay</strong>. Each April, the whole pot is revalued upwards by CPI (Consumer Prices Index) to protect against inflation. We assume <strong>3% CPI per year</strong> for this estimate. This means your pension at retirement is higher than simply adding the annual percentages together — earlier years benefit from more years of compounding. The "estimated pension" shown in the total row below reflects this CPI compounding, including a pro-rated final part-year if you retire mid-year.
+            </GovHint>
 
             {carePeriods.map(p=>{
               const months = getServiceMonths(p);
               const schemeYears = Math.ceil(months / 12);
               const rate = p.scheme==="nuvos" ? 0.023 : 0.0232;
               const rateLabel = p.scheme==="nuvos" ? "2.3%" : "2.32%";
-              const runningTotal = (p.salaryInputs||[]).reduce((s,v)=>s+(parseFloat(v)||0)*rate,0);
+              const CPI = 0.03;
+              // CPI-compounded running total matching the compute function
+              const fullYears = Math.floor(months / 12);
+              const partMonths = months % 12;
+              let pot = 0;
+              for(let i=0; i<fullYears; i++){
+                const sal = parseFloat(p.salaryInputs?.[i]) || 0;
+                pot = (pot + sal * rate) * (1 + CPI);
+              }
+              if(partMonths > 0){
+                const partSal = parseFloat(p.salaryInputs?.[fullYears]) || 0;
+                pot += partSal * rate * (partMonths / 12);
+              }
+              const runningTotal = pot;
               return(
                 <div key={p.id} style={{marginBottom:32}}>
                   <h3 style={{fontSize:18,fontWeight:"bold",color:G.greenDark,margin:"0 0 4px"}}>
@@ -659,7 +702,7 @@ export default function App(){
                                 {errors[ek]&&<div style={{color:G.error,fontSize:13,marginTop:4}}>Enter a salary for this year</div>}
                               </td>
                               <td style={{padding:"10px 14px",color:sal>0?G.greenDark:G.textSec,fontWeight:sal>0?"bold":"normal"}}>
-                                {sal>0?fmt(sal*rate)+"/yr":"—"}
+                                {sal>0?fmt(sal*rate)+" raw":"—"}
                               </td>
                             </tr>
                           );
@@ -667,9 +710,15 @@ export default function App(){
                       </tbody>
                       <tfoot>
                         <tr style={{background:G.greenLight,borderTop:`2px solid ${G.greenBorder}`}}>
-                          <td style={{padding:"10px 14px",fontWeight:"bold"}}>Total</td>
-                          <td style={{padding:"10px 14px",color:G.textSec,fontSize:13}}>{(p.salaryInputs||[]).filter(Boolean).length} of {schemeYears} entered</td>
-                          <td style={{padding:"10px 14px",fontWeight:"bold",color:G.greenDark}}>{fmt(runningTotal)}/yr</td>
+                          <td style={{padding:"10px 14px",fontWeight:"bold"}}>Estimated pension</td>
+                          <td style={{padding:"10px 14px",color:G.textSec,fontSize:13}}>
+                            {(p.salaryInputs||[]).filter(Boolean).length} of {schemeYears} entered
+                            {partMonths>0&&<span style={{display:"block",fontSize:11,marginTop:2}}>incl. {partMonths}-month part year</span>}
+                          </td>
+                          <td style={{padding:"10px 14px",fontWeight:"bold",color:G.greenDark}}>
+                            {fmt(runningTotal)}/yr
+                            <div style={{fontSize:11,fontWeight:"normal",color:G.textSec,marginTop:2}}>incl. 3% CPI compounding</div>
+                          </td>
                         </tr>
                       </tfoot>
                     </table>
@@ -888,6 +937,9 @@ export default function App(){
 
           {/* Breakdown table */}
           <h2 style={{...sH2,marginTop:28}}>How your pension is built up</h2>
+          <div style={{background:G.greenLight,border:`1px solid ${G.greenBorder}`,padding:"8px 14px",marginBottom:12,fontSize:13,color:G.greenDark}}>
+            ℹ️ <strong>Alpha and Nuvos figures include CPI revaluation at an assumed 3% per year.</strong> Each April the whole pot is uprated by 3% — earlier years of service benefit from more years of compounding. The final part-year (if retiring mid-year) is added at raw accrual value with no CPI applied, as CPI is only awarded on April scheme anniversaries.
+          </div>
           <table style={{width:"100%",borderCollapse:"collapse",fontSize:14,marginBottom:24}}>
             <thead>
               <tr style={{background:G.greenDark,color:G.white}}>
