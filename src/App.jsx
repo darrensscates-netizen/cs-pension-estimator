@@ -226,8 +226,13 @@ export default function App(){
     setErrors({});
     if(step === 3) compute();
     setStep(s => s + 1);
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }
-  function back(){ setErrors({}); setStep(s => Math.max(0, s - 1)); }
+  function back(){
+    setErrors({});
+    setStep(s => Math.max(0, s - 1));
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
 
   // ── compute ──
   function compute(){
@@ -752,11 +757,26 @@ export default function App(){
         {step===4&&results&&<>
           <H1>{name?`${name}'s pension estimate`:"Your pension estimate"}</H1>
 
-          <div style={{background:G.green,color:G.white,padding:"22px 24px",marginBottom:20}}>
-            <div style={{fontSize:14,marginBottom:6,opacity:0.9}}>Estimated annual pension (before tax)</div>
-            <div style={{fontSize:46,fontWeight:"bold",lineHeight:1,marginBottom:6}}>{fmt(results.finalPension)}</div>
-            <div style={{fontSize:18,opacity:0.9}}>{fmt(results.monthly)} per month</div>
-          </div>
+          {/* Headline pension — for VR show the buy-out (best case) figure as the primary */}
+          {results.basis==="voluntary_retirement"
+            ?<>
+              <div style={{background:G.green,color:G.white,padding:"22px 24px",marginBottom:4}}>
+                <div style={{fontSize:13,marginBottom:4,opacity:0.85}}>Estimated annual pension — assuming buy-out of actuarial reduction (VR terms, before tax)</div>
+                <div style={{fontSize:46,fontWeight:"bold",lineHeight:1,marginBottom:6}}>{fmt(results.vrPensionIfFullBuyOut - results.commuteGiveUp)}</div>
+                <div style={{fontSize:18,opacity:0.9}}>{fmt((results.vrPensionIfFullBuyOut - results.commuteGiveUp) / 12)} per month</div>
+              </div>
+              <div style={{background:"#505a5f",color:G.white,padding:"12px 20px",marginBottom:20,fontSize:14}}>
+                If <strong>no buy-out</strong> is made (or under Voluntary Exit terms where shortfall is not covered):&nbsp;
+                <strong>{fmt(results.finalPension)}/yr</strong> ({fmt(results.monthly)}/month)
+                &nbsp;— see CSCS section below for full detail.
+              </div>
+            </>
+            :<div style={{background:G.green,color:G.white,padding:"22px 24px",marginBottom:20}}>
+              <div style={{fontSize:14,marginBottom:6,opacity:0.9}}>Estimated annual pension (before tax)</div>
+              <div style={{fontSize:46,fontWeight:"bold",lineHeight:1,marginBottom:6}}>{fmt(results.finalPension)}</div>
+              <div style={{fontSize:18,opacity:0.9}}>{fmt(results.monthly)} per month</div>
+            </div>
+          }
 
           {results.totalLump>0&&<div style={{background:G.greenLight,border:`2px solid ${G.greenBorder}`,padding:"16px 20px",marginBottom:20}}>
             <div style={{fontSize:14,color:G.textSec,marginBottom:4}}>Tax-free lump sum</div>
@@ -915,6 +935,8 @@ export default function App(){
                 ["State Pension Age",results.spa],
                 ["Alpha Normal Pension Age",results.aNPA],
                 ["Retirement basis",{normal:"Normal/late retirement",early:"Voluntary early retirement",voluntary_retirement:"CSCS Voluntary Exit/Redundancy",ill_health_lower:"Ill-health — Lower Tier",ill_health_upper:"Ill-health — Upper Tier"}[results.basis]],
+                results.basis==="voluntary_retirement"?["Pension (with VR buy-out applied)",`${fmt(results.vrPensionIfFullBuyOut - results.commuteGiveUp)}/yr · ${fmt((results.vrPensionIfFullBuyOut - results.commuteGiveUp)/12)}/month`]:null,
+                results.basis==="voluntary_retirement"?["Pension (no buy-out / VE reduced)",`${fmt(results.finalPension)}/yr · ${fmt(results.monthly)}/month`]:null,
                 results.hasBreaks?["Longest break in service",`${fmtYrs(results.longestBreak)} ${results.finalSalaryLinkLost?"— final salary link LOST":"— final salary link retained"}`]:null,
                 results.commuteGiveUp>0?["Pension commuted",`${fmt(results.commuteGiveUp)}/yr → ${fmt(results.lumpFromCommute)} lump sum`]:null,
               ].filter(Boolean).map(([k,v],i)=>(
