@@ -381,6 +381,7 @@ export default function App(){
     let vrPostBreakReduction = 0, vrPreBreakReduction = 0;
     let vrBuyOutCostPostBreak = 0;
     let vrPensionIfFullBuyOut = 0;
+    let vrTransfersReduced = 0;
 
     if(basis === "voluntary_retirement"){
       // Find the last break end date (if any)
@@ -407,7 +408,7 @@ export default function App(){
       });
 
       // Sum of all transfer-in reduced amounts — transfers always stay reduced, no buy-out
-      const vrTransfersReduced = breakdown
+      vrTransfersReduced = breakdown
         .filter(b => b.isTransfer)
         .reduce((s, b) => s + b.reduced, 0);
 
