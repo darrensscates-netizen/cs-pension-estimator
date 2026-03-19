@@ -72,6 +72,10 @@ function makePeriod(type="service"){
 }
 
 export default function App(){
+  const [disclaimerAccepted,setDisclaimerAccepted]=useState(false);
+  const [disclaimerScrolled,setDisclaimerScrolled]=useState(false);
+  const [disclaimerChecked,setDisclaimerChecked]=useState(false);
+
   const [step,setStep]=useState(0);
   const [errors,setErrors]=useState({});
   const [dob,setDob]=useState("");
@@ -307,6 +311,140 @@ export default function App(){
 
   const stepTitles=["About you","Career history","Salary details","Retirement plans","Your estimate"];
 
+  // ── Disclaimer gate ──
+  if(!disclaimerAccepted){
+    return(
+      <div style={{fontFamily:G.font,background:G.bg,minHeight:"100vh",color:G.text}}>
+        <div style={{background:G.green}}>
+          <div style={{maxWidth:960,margin:"0 auto",padding:"0 30px"}}>
+            <div style={{padding:"14px 0 10px",display:"flex",alignItems:"center",gap:14,borderBottom:"1px solid rgba(255,255,255,0.3)"}}>
+              <div style={{background:"white",color:G.green,fontWeight:"900",fontSize:15,padding:"4px 8px",letterSpacing:-0.5}}>CS</div>
+              <span style={{color:"white",fontSize:18,fontWeight:"bold"}}>Civil Service Pension Estimator</span>
+            </div>
+            <div style={{padding:"8px 0 12px",fontSize:14,color:"rgba(255,255,255,0.85)"}}>
+              Informal estimation tool — not an official Civil Service Pensions service
+            </div>
+          </div>
+        </div>
+
+        <div style={{maxWidth:680,margin:"0 auto",padding:"40px 30px 80px"}}>
+          <div style={{background:"#fff4e5",border:`4px solid ${G.warning}`,padding:"16px 20px",marginBottom:24}}>
+            <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
+              <span style={{fontSize:22}}>⚠</span>
+              <strong style={{fontSize:18}}>IMPORTANT — Please read before continuing</strong>
+            </div>
+            <p style={{margin:"0 0 6px",fontSize:14,fontWeight:"bold",color:G.error}}>
+              THIS IS NOT AN OFFICIAL GOVERNMENT OR CIVIL SERVICE PENSIONS SERVICE
+            </p>
+            <p style={{margin:"0 0 6px",fontSize:14,fontWeight:"bold",color:G.error}}>
+              NOTHING ON THIS TOOL CONSTITUTES FINANCIAL, PENSION, LEGAL OR ANY OTHER PROFESSIONAL ADVICE
+            </p>
+          </div>
+
+          <h1 style={{fontSize:28,fontWeight:"bold",borderBottom:`4px solid ${G.green}`,paddingBottom:12,marginBottom:20}}>
+            Important Disclaimer and Terms of Use
+          </h1>
+
+          <div
+            onScroll={e=>{
+              const el=e.target;
+              if(el.scrollHeight-el.scrollTop-el.clientHeight<30) setDisclaimerScrolled(true);
+            }}
+            style={{
+              height:380,overflowY:"scroll",border:`2px solid ${G.border}`,
+              background:G.white,padding:"20px 24px",marginBottom:20,
+              fontSize:14,lineHeight:1.8,
+            }}
+          >
+            <h2 style={{fontSize:18,fontWeight:"bold",marginTop:0}}>1. Nature of this tool</h2>
+            <p>This Civil Service Pension Estimator ("the Tool") is an <strong>independent, informal estimation tool</strong>. It is not affiliated with, endorsed by, or connected to HM Government, the Cabinet Office, Civil Service Pensions, the Scheme Administrator (Capita), or any other official body. It is not part of the Civil Service Pension Scheme website or any official government service.</p>
+
+            <h2 style={{fontSize:18,fontWeight:"bold"}}>2. Not financial, pension or legal advice</h2>
+            <p>The output produced by this Tool is <strong>an estimate only</strong>. Nothing produced by or contained within this Tool constitutes:</p>
+            <ul>
+              <li>Financial advice of any kind;</li>
+              <li>Pension advice of any kind;</li>
+              <li>Legal advice of any kind;</li>
+              <li>Actuarial advice of any kind; or</li>
+              <li>Any other form of professional advice.</li>
+            </ul>
+            <p>You should not make any retirement, financial or employment decision based solely or primarily on the output of this Tool. Before making any such decision you should obtain a formal benefit statement from the Scheme Administrator and, where appropriate, take independent regulated financial advice from a suitably qualified financial adviser authorised by the Financial Conduct Authority (FCA).</p>
+
+            <h2 style={{fontSize:18,fontWeight:"bold"}}>3. Accuracy and limitations</h2>
+            <p>Estimates are based on publicly available Civil Service Pension Scheme rules as understood at the time this Tool was last updated. The Tool does <strong>not</strong> account for, among other things:</p>
+            <ul>
+              <li>The McCloud/2015 Remedy and Deferred Choice Underpin;</li>
+              <li>Added Pension or Additional Voluntary Contribution (AVC) top-ups;</li>
+              <li>Exact Consumer Prices Index (CPI) uprating on deferred pensions;</li>
+              <li>Pension sharing orders arising from divorce or dissolution of civil partnership;</li>
+              <li>Abatement rules;</li>
+              <li>Partial retirement scenarios;</li>
+              <li>Early Payment Age (EPA) or Enhanced Early Payment Age (EEPA) arrangements;</li>
+              <li>Club transfer factors as set by the Government Actuary's Department;</li>
+              <li>Future changes to State Pension Age or scheme rules; or</li>
+              <li>Individual circumstances that may affect your entitlement.</li>
+            </ul>
+            <p>Early retirement reduction factors used in this Tool are <strong>indicative only</strong>. Actual factors are set periodically by the Government Actuary's Department and may differ materially from those used here.</p>
+            <p>The Tool uses simplified calculation methods. Your actual pension will be calculated by the Scheme Administrator using verified payroll data, full service records and the precise scheme regulations in force at your retirement date.</p>
+
+            <h2 style={{fontSize:18,fontWeight:"bold"}}>4. No liability</h2>
+            <p>To the fullest extent permitted by applicable law, the operator of this Tool accepts <strong>no liability whatsoever</strong> for any loss, damage, cost or expense of any nature (whether direct, indirect, consequential or otherwise) arising from your use of or reliance on this Tool or its outputs. This includes but is not limited to financial loss, loss of pension entitlement, or any decision made in reliance on an estimate produced by this Tool.</p>
+
+            <h2 style={{fontSize:18,fontWeight:"bold"}}>5. No data collection</h2>
+            <p>This Tool operates entirely within your browser. No personal data, salary information or pension details entered into this Tool are transmitted to any server, stored, or shared with any third party. All calculations are performed locally on your device and no information is retained after you close or refresh the page.</p>
+
+            <h2 style={{fontSize:18,fontWeight:"bold"}}>6. Official sources</h2>
+            <p>For an official pension estimate you should use the <strong>Retirement Modeller</strong> on the Civil Service Pension Portal at <strong>www.civilservicepensionscheme.org.uk</strong>. For formal benefit statements, contact the Scheme Administrator. For regulated financial advice, consult an FCA-authorised financial adviser. You can find one at <strong>www.moneyhelper.org.uk</strong>.</p>
+
+            <h2 style={{fontSize:18,fontWeight:"bold"}}>7. Intellectual property</h2>
+            <p>This Tool uses a design style inspired by the GOV.UK Design System. It is not an official government service and does not claim to be. The GOV.UK Design System is used under the MIT licence.</p>
+
+            <p style={{fontStyle:"italic",color:G.textSec,marginTop:24,borderTop:`1px solid ${G.border}`,paddingTop:16}}>
+              Scroll to the bottom of this disclaimer to proceed. By ticking the box below and clicking "I understand and agree", you confirm that you have read, understood and agree to these terms, and that you will not treat any output of this Tool as financial, pension or legal advice.
+            </p>
+          </div>
+
+          {!disclaimerScrolled&&(
+            <p style={{color:G.textSec,fontSize:14,margin:"0 0 16px",fontStyle:"italic"}}>
+              ↑ Please scroll to the bottom of the disclaimer above to continue.
+            </p>
+          )}
+
+          {disclaimerScrolled&&(
+            <>
+              <label style={{display:"flex",gap:12,alignItems:"flex-start",cursor:"pointer",marginBottom:20,background:disclaimerChecked?G.greenLight:"white",border:`2px solid ${disclaimerChecked?G.greenBorder:G.border}`,padding:"14px 16px"}}>
+                <input type="checkbox" checked={disclaimerChecked} onChange={e=>setDisclaimerChecked(e.target.checked)}
+                  style={{accentColor:G.green,width:22,height:22,flexShrink:0,marginTop:2}}/>
+                <span style={{fontSize:15,lineHeight:1.6}}>
+                  <strong>I have read and understood the disclaimer above.</strong> I confirm that I will not treat any output of this Tool as financial, pension, legal or any other professional advice, and that I understand this is not an official Civil Service Pensions service.
+                </span>
+              </label>
+
+              <button
+                onClick={()=>{ if(disclaimerChecked) setDisclaimerAccepted(true); }}
+                disabled={!disclaimerChecked}
+                style={{
+                  background:disclaimerChecked?G.green:"#b1b4b6",
+                  color:"white",border:"none",padding:"14px 28px",
+                  fontSize:17,fontWeight:"bold",fontFamily:G.font,
+                  cursor:disclaimerChecked?"pointer":"not-allowed",
+                  opacity:disclaimerChecked?1:0.7,
+                }}>
+                I understand and agree — continue to the estimator
+              </button>
+            </>
+          )}
+        </div>
+
+        <div style={{background:G.greenDark,color:"rgba(255,255,255,0.7)",padding:"20px 30px",fontSize:13}}>
+          <div style={{maxWidth:960,margin:"0 auto"}}>
+            Civil Service Pension Estimator · Independent informal tool · Not an official Civil Service Pensions service · Not financial, pension or legal advice
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return(
     <div style={{fontFamily:G.font,background:G.bg,minHeight:"100vh",color:G.text}}>
 
@@ -320,6 +458,14 @@ export default function App(){
           <div style={{padding:"8px 0 12px",fontSize:14,color:"rgba(255,255,255,0.85)"}}>
             Informal guide to your Civil Service pension — not an official calculation
           </div>
+        </div>
+      </div>
+
+      {/* PERSISTENT DISCLAIMER BANNER */}
+      <div style={{background:"#fff4e5",borderBottom:`3px solid ${G.warning}`,padding:"10px 30px"}}>
+        <div style={{maxWidth:960,margin:"0 auto",fontSize:13,color:"#594000",display:"flex",gap:10,alignItems:"flex-start",flexWrap:"wrap"}}>
+          <span style={{fontWeight:"bold",whiteSpace:"nowrap"}}>⚠ Not an official service.</span>
+          <span>This tool produces <strong>estimates only</strong> and does not constitute financial, pension or legal advice. For an official calculation use the <strong>Civil Service Pension Portal</strong>. Always consult a regulated financial adviser before making retirement decisions.</span>
         </div>
       </div>
 
@@ -691,16 +837,47 @@ export default function App(){
             </tbody>
           </table>
 
-          <div style={{background:"#fff4e5",borderLeft:`8px solid ${G.warning}`,padding:"16px 20px",fontSize:14,lineHeight:1.7,marginBottom:24}}>
-            <strong style={{fontSize:15}}>Important — this is an estimate only</strong>
-            <p style={{margin:"8px 0 0"}}>
-              This tool provides an informal estimate based on published Civil Service Pension Scheme rules. It is not a formal benefit statement and does not constitute financial advice. Your actual pension will be calculated by the Scheme Administrator (Capita) from verified payroll and service data.
+          <div style={{background:"#fff4e5",border:`3px solid ${G.warning}`,padding:"20px 24px",fontSize:14,lineHeight:1.8,marginBottom:24}}>
+            <div style={{display:"flex",gap:10,alignItems:"center",marginBottom:12}}>
+              <span style={{fontSize:20}}>⚠</span>
+              <strong style={{fontSize:17,color:G.error}}>IMPORTANT DISCLAIMER — READ BEFORE ACTING ON THESE FIGURES</strong>
+            </div>
+
+            <p style={{margin:"0 0 10px",fontWeight:"bold",color:G.error}}>
+              THIS IS NOT AN OFFICIAL CIVIL SERVICE PENSIONS CALCULATION. THIS IS NOT FINANCIAL, PENSION OR LEGAL ADVICE.
             </p>
-            <p style={{margin:"8px 0 0"}}>
-              This estimate does not cover: the McCloud/2015 Remedy · Added Pension or AVC top-ups · Exact CPI uprating on deferred pensions · Pension sharing orders · Abatement · Possible future changes to State Pension Age. Early retirement factors are indicative — exact factors are set by the Government Actuary's Department.
+
+            <p style={{margin:"0 0 10px"}}>
+              This estimate is produced by an <strong>independent informal tool</strong> and is not affiliated with HM Government, the Cabinet Office, Civil Service Pensions, or the Scheme Administrator (Capita). It has no official standing and <strong>must not be treated as a formal benefit statement</strong>.
             </p>
-            <p style={{margin:"8px 0 0"}}>
-              For an official estimate use the <strong>Retirement Modeller</strong> on the Civil Service Pension Portal at <span style={{color:G.link}}>www.civilservicepensionscheme.org.uk</span>
+
+            <p style={{margin:"0 0 10px"}}>
+              <strong>Do not make any retirement, financial or employment decision based solely or primarily on this estimate.</strong> Your actual pension entitlement will depend on your verified service and payroll records and will be calculated by the Scheme Administrator under the precise scheme regulations in force at your retirement date. The figures shown here may differ materially from your actual entitlement.
+            </p>
+
+            <p style={{margin:"0 0 10px"}}>This estimate does <strong>not</strong> account for:</p>
+            <ul style={{margin:"0 0 10px",paddingLeft:20}}>
+              <li>The McCloud/2015 Remedy and Deferred Choice Underpin</li>
+              <li>Added Pension or Additional Voluntary Contributions (AVCs)</li>
+              <li>Exact CPI uprating applied to deferred pensions during breaks in service</li>
+              <li>Pension sharing orders arising from divorce or dissolution of civil partnership</li>
+              <li>Abatement rules on re-employment</li>
+              <li>Early Payment Age (EPA) or Enhanced EPA arrangements</li>
+              <li>Exact actuarial reduction factors (figures used are indicative only)</li>
+              <li>Future changes to State Pension Age or scheme rules</li>
+              <li>Individual circumstances that may affect your entitlement</li>
+            </ul>
+
+            <p style={{margin:"0 0 10px"}}>
+              <strong>For an official estimate:</strong> use the Retirement Modeller on the Civil Service Pension Portal at <strong>www.civilservicepensionscheme.org.uk</strong>, or contact the Scheme Administrator directly.
+            </p>
+
+            <p style={{margin:"0 0 10px"}}>
+              <strong>For regulated financial advice:</strong> consult an Independent Financial Adviser (IFA) authorised by the Financial Conduct Authority (FCA). You can find one at <strong>www.moneyhelper.org.uk</strong> or <strong>www.unbiased.co.uk</strong>.
+            </p>
+
+            <p style={{margin:0,color:G.textSec,fontSize:13,borderTop:`1px solid ${G.border}`,paddingTop:10,marginTop:10}}>
+              By using this tool you confirmed on entry that you have read and agreed to the full disclaimer and terms of use, and that you will not treat any output as professional advice of any kind. The operator of this tool accepts no liability for any loss or damage arising from reliance on these estimates.
             </p>
           </div>
 
@@ -721,8 +898,8 @@ export default function App(){
       </div>
 
       <div style={{background:G.greenDark,color:"rgba(255,255,255,0.7)",padding:"20px 30px",fontSize:13}}>
-        <div style={{maxWidth:960,margin:"0 auto"}}>
-          Civil Service Pension Estimator · Informal tool based on published CSPS rules · Not an official Civil Service Pensions service
+        <div style={{maxWidth:960,margin:"0 auto",lineHeight:1.7}}>
+          <strong style={{color:"rgba(255,255,255,0.9)"}}>Civil Service Pension Estimator</strong> · Independent informal tool · Not an official Civil Service Pensions service · Not affiliated with HM Government, the Cabinet Office or Capita · Output is not financial, pension or legal advice · For official calculations visit <strong style={{color:"rgba(255,255,255,0.9)"}}>www.civilservicepensionscheme.org.uk</strong>
         </div>
       </div>
     </div>
@@ -929,7 +1106,7 @@ function GovSelect({value,onChange,children,width}){
   return(
     <select value={value} onChange={onChange}
       style={{border:`2px solid ${G.borderDark}`,padding:"8px 12px",fontSize:16,
-        fontFamily:G.font,background:G.white,width:width||"100%",outline:"none",cursor:"pointer"}}>
+        fontFamily:G.font,background:G.white,color:G.text,width:width||"100%",outline:"none",cursor:"pointer"}}>
       {children}
     </select>
   );
