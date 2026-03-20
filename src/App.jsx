@@ -1,4 +1,4 @@
-import { useState } from "react";
+import React, { useState } from "react";
 
 // ─── DESIGN TOKENS ────────────────────────────────────────────────────────────
 const G = {
@@ -33,9 +33,35 @@ function yearsBetween(from, to){
 }
 
 function getSPA(dob){
+  // UK State Pension Age per legislation (Pensions Acts 1995, 2007, 2014)
+  // Uses dobMonth and dobYear directly for precision
   if(!dob) return 67;
-  const y = new Date(dob).getFullYear();
-  return y < 1960 ? 65 : y < 1977 ? 66 : 67;
+  const d = new Date(dob);
+  const y = d.getFullYear();
+  const m = d.getMonth() + 1; // 1-12
+
+  // Born before 6 Oct 1954: SPA 65 (men) / was 60 (women) — equalised to 65
+  if(y < 1954 || (y === 1954 && m < 10)) return 65;
+
+  // Born 6 Oct 1954 – 5 Apr 1960: SPA 66
+  if(y < 1960 || (y === 1960 && m <= 3)) return 66;
+
+  // Born 6 Apr 1960 – 5 Mar 1961: transitional 66+months
+  // Each month of birth from Apr 1960 adds one month to SPA
+  // Apr 1960 = 66y1m, May 1960 = 66y2m ... Feb 1961 = 66y11m
+  if(y === 1960 || (y === 1961 && m <= 2)){
+    // months past April 1960
+    const monthsPast = (y - 1960) * 12 + (m - 4);
+    const extraMonths = Math.min(monthsPast + 1, 11); // 1 to 11
+    // Return as decimal years for NPA calculation
+    return 66 + extraMonths / 12;
+  }
+
+  // Born 6 Mar 1961 – 5 Apr 1977: SPA 67
+  if(y < 1977 || (y === 1977 && m <= 3)) return 67;
+
+  // Born 6 Apr 1977 onwards: SPA 68 (legislated, may change)
+  return 68;
 }
 function getAlphaNPA(dob){ return Math.max(65, getSPA(dob)); }
 function getNPA(scheme, dob){
@@ -580,8 +606,18 @@ export default function App(){
             <ul style={{margin:"6px 0 0",paddingLeft:20,lineHeight:1.8}}>
               <li>Classic / Premium: <strong>60</strong></li>
               <li>Nuvos: <strong>65</strong></li>
-              <li>Alpha: <strong>{getAlphaNPA(dob)}</strong> (greater of State Pension Age {getSPA(dob)} or 65)</li>
+              <li>Alpha: <strong>{(() => {
+                const spa = getSPA(dob);
+                const npa = getAlphaNPA(dob);
+                if(Number.isInteger(spa)) return `${npa} (State Pension Age: ${spa})`;
+                const spaYrs = Math.floor(spa);
+                const spaMths = Math.round((spa - spaYrs) * 12);
+                return `${spaYrs} years ${spaMths} months (your State Pension Age — transitional cohort)`;
+              })()}</strong></li>
             </ul>
+            {getSPA(dob) >= 68 && <p style={{margin:"8px 0 0",fontSize:13,color:G.textSec}}>
+              ⚠ The rise to age 68 is legislated but subject to government review and may change before it applies to you.
+            </p>}
           </GovInset>}
 
           <GovDetails summary="Which scheme am I in?">
@@ -762,7 +798,7 @@ export default function App(){
           <H1>Retirement plans</H1>
 
           <h2 style={sH2}>Intended retirement date</h2>
-          <GovHint>{dob?`Alpha NPA: ${getAlphaNPA(dob)} · Classic/Premium NPA: 60 · Nuvos NPA: 65 · Minimum pension age: ${getMinAge(dob)}`:""}</GovHint>
+          <GovHint>{dob?`Alpha NPA: ${(() => { const s=getSPA(dob); if(Number.isInteger(s)) return getAlphaNPA(dob); const y=Math.floor(s),m=Math.round((s-y)*12); return `${y}yr ${m}mth`; })()} · Classic/Premium NPA: 60 · Nuvos NPA: 65 · Minimum pension age: ${getMinAge(dob)}`:""}</GovHint>
           <div style={{display:"flex",gap:16,flexWrap:"wrap",alignItems:"flex-end",marginBottom:24}}>
             <GovField label="Month" id="retMonth" compact>
               <GovSelect value={retMonth} onChange={e=>setRetMonth(e.target.value)} width={160}>
@@ -1003,7 +1039,7 @@ export default function App(){
                     {b.factor<1?`−${fmtPct(1-b.factor)} (${fmtYrs(b.yearsEarly)} early)`:"None"}
                   </td>
                   <td style={{padding:"9px 10px",fontWeight:"bold"}}>{fmt(b.reduced)}</td>
-                  <td style={{padding:"9px 10px"}}>{b.npa}</td>
+                  <td style={{padding:"9px 10px"}}>{(() => { const n=b.npa; if(Number.isInteger(n)) return n; const y=Math.floor(n),m=Math.round((n-y)*12); return `${y}yr ${m}m`; })()}</td>
                 </tr>
               ))}
               <tr style={{background:G.greenLight,borderTop:`2px solid ${G.greenBorder}`,fontWeight:"bold"}}>
@@ -1026,8 +1062,8 @@ export default function App(){
               {[
                 ["Planned retirement date",`${MONTHS[results.retDate.month-1]} ${results.retDate.year}`],
                 ["Estimated retirement age",`${results.retAgeDecimal} years`],
-                ["State Pension Age",results.spa],
-                ["Alpha Normal Pension Age",results.aNPA],
+                ["State Pension Age", (() => { const s=results.spa; if(Number.isInteger(s)) return s; const y=Math.floor(s),m=Math.round((s-y)*12); return `${y} years ${m} months (transitional cohort)`; })()],
+                ["Alpha Normal Pension Age", (() => { const n=results.aNPA; if(Number.isInteger(n)) return n; const y=Math.floor(n),m=Math.round((n-y)*12); return `${y} years ${m} months`; })()],
                 ["Retirement basis",{normal:"Normal/late retirement",early:"Voluntary early retirement",voluntary_retirement:"CSCS Voluntary Exit/Redundancy",ill_health_lower:"Ill-health — Lower Tier",ill_health_upper:"Ill-health — Upper Tier"}[results.basis]],
                 results.basis==="voluntary_retirement"?["Pension (with VR buy-out applied)",`${fmt(results.vrPensionIfFullBuyOut - results.commuteGiveUp)}/yr · ${fmt((results.vrPensionIfFullBuyOut - results.commuteGiveUp)/12)}/month`]:null,
                 results.basis==="voluntary_retirement"?["Pension (no buy-out / VE reduced)",`${fmt(results.finalPension)}/yr · ${fmt(results.monthly)}/month`]:null,
